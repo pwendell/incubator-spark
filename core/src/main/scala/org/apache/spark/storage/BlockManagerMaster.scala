@@ -99,6 +99,13 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
   }
 
   /**
+   * Drops shuffle blocks on all executors.
+   */
+  def dropShuffleBlocks() {
+    askDriverWithReply(DropShuffleBlocks)
+  }
+
+  /**
    * Remove all blocks belonging to the given RDD.
    */
   def removeRdd(rddId: Int, blocking: Boolean) {

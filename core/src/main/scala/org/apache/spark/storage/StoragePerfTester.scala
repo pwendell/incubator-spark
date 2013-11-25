@@ -56,6 +56,7 @@ object StoragePerfTester {
       }
 
       shuffle.releaseWriters(buckets)
+      sc.dropShuffleBlocks()
     }
 
     for (s <- 0 until numShuffles) {

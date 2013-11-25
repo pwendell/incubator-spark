@@ -824,6 +824,11 @@ private[spark] class BlockManager(
     dropOldBlocks(cleanupTime, _.isBroadcast)
   }
 
+  /** EXPERIMENTAL */
+  def dropAllShuffleBlocks() {
+    dropOldBlocks(System.currentTimeMillis(), _.isShuffle)
+  }
+
   private def dropOldBlocks(cleanupTime: Long, shouldDrop: (BlockId => Boolean)) {
     val iterator = blockInfo.internalMap.entrySet().iterator()
     while (iterator.hasNext) {
