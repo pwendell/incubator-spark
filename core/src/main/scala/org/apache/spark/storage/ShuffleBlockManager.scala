@@ -27,6 +27,8 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{MetadataCleanerType, MetadataCleaner, TimeStampedHashMap}
 import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
 import org.apache.spark.storage.ShuffleBlockManager.ShuffleFileGroup
+import java.util.concurrent.ConcurrentHashMap
+import scala.collection.JavaConversions._
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */
 private[spark] trait ShuffleWriterGroup {
@@ -64,6 +66,8 @@ class ShuffleBlockManager(blockManager: BlockManager) {
   val consolidateShuffleFiles =
     System.getProperty("spark.shuffle.consolidateFiles", "true").toBoolean
 
+
+  private val existingBlocks = new ConcurrentHashMap[String, String]
   private val bufferSize = System.getProperty("spark.shuffle.file.buffer.kb", "100").toInt * 1024
 
   /**
@@ -82,6 +86,13 @@ class ShuffleBlockManager(blockManager: BlockManager) {
   private
   val metadataCleaner = new MetadataCleaner(MetadataCleanerType.SHUFFLE_BLOCK_MANAGER, this.cleanup)
 
+  /** EXPERIMENTAL */
+  def dropAllShuffleFiles() {
+    this.shuffleStates.values.map(s => s.allFileGroups.map(fg => fg.files.map(f => f.delete())))
+    existingBlocks.keySet.foreach(block => blockManager.diskStore.remove(BlockId(block)))
+    existingBlocks.keySet.map(b => b).foreach(b => existingBlocks.remove(b))
+  }
+
   def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer) = {
     new ShuffleWriterGroup {
       shuffleStates.putIfAbsent(shuffleId, new ShuffleState())
@@ -97,6 +108,7 @@ class ShuffleBlockManager(blockManager: BlockManager) {
       } else {
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
+          existingBlocks.put(blockId.name, "")
           val blockFile = blockManager.diskBlockManager.getFile(blockId)
           blockManager.getDiskWriter(blockId, blockFile, serializer, bufferSize)
         }

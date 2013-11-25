@@ -761,6 +761,11 @@ private[spark] class BlockManager(
     dropOldBlocks(cleanupTime, _.isBroadcast)
   }
 
+  /** EXPERIMENTAL */
+  def dropAllShuffleBlocks() {
+    this.shuffleBlockManager.dropAllShuffleFiles()
+  }
+
   private def dropOldBlocks(cleanupTime: Long, shouldDrop: (BlockId => Boolean)) {
     val iterator = blockInfo.internalMap.entrySet().iterator()
     while (iterator.hasNext) {
