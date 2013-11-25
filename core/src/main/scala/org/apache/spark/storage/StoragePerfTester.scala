@@ -14,31 +14,36 @@ import org.apache.spark.util.Utils
  */
 object StoragePerfTester {
   def main(args: Array[String]) = {
-    /** Total amount of data to generate. Distributed evenly amongst maps and reduce splits. */
+    /** Amount of data to generate per shuffle. Distributed amongst maps and reduce splits. */
     val dataSizeMb = Utils.memoryStringToMb(sys.env.getOrElse("OUTPUT_DATA", "1g"))
 
-    /** Number of map tasks. All tasks execute concurrently. */
+    /** Number of map tasks. */
     val numMaps = sys.env.get("NUM_MAPS").map(_.toInt).getOrElse(8)
+
+    /** Number of concurrent maps to run. */
+    val numSlots = sys.env.get("NUM_SLOTS").map(_.toInt).getOrElse(8)
 
     /** Number of reduce splits for each map task. */
     val numOutputSplits = sys.env.get("NUM_REDUCERS").map(_.toInt).getOrElse(500)
+
+    /** Number of shuffles to run.. */
+    val numShuffles = sys.env.get("NUM_SHUFFLES").map(_.toInt).getOrElse(1)
 
     val recordLength = 1000 // ~1KB records
     val totalRecords = dataSizeMb * 1000
     val recordsPerMap = totalRecords / numMaps
 
     val writeData = "1" * recordLength
-    val executor = Executors.newFixedThreadPool(numMaps)
 
     System.setProperty("spark.shuffle.compress", "false")
-    System.setProperty("spark.shuffle.sync", "true")
+    System.setProperty("spark.shuffle.sync", "false")
 
     // This is only used to instantiate a BlockManager. All thread scheduling is done manually.
     val sc = new SparkContext("local[4]", "Write Tester")
     val blockManager = sc.env.blockManager
 
-    def writeOutputBytes(mapId: Int, total: AtomicLong) = {
-      val shuffle = blockManager.shuffleBlockManager.forShuffle(1, numOutputSplits,
+    def writeOutputBytes(shuffleId: Int, mapId: Int, total: AtomicLong) = {
+      val shuffle = blockManager.shuffleBlockManager.forShuffle(shuffleId, numOutputSplits,
         new KryoSerializer())
       val buckets = shuffle.acquireWriters(mapId)
       for (i <- 1 to recordsPerMap) {
@@ -53,34 +58,40 @@ object StoragePerfTester {
       shuffle.releaseWriters(buckets)
     }
 
-    val start = System.currentTimeMillis()
-    val latch = new CountDownLatch(numMaps)
-    val totalBytes = new AtomicLong()
-    for (task <- 1 to numMaps) {
-      executor.submit(new Runnable() {
-        override def run() = {
-          try {
-            writeOutputBytes(task, totalBytes)
-            latch.countDown()
-          } catch {
-            case e: Exception =>
-              println("Exception in child thread: " + e + " " + e.getMessage)
-              System.exit(1)
+    for (s <- 0 until numShuffles) {
+      val executor = Executors.newFixedThreadPool(numSlots)
+      val start = System.currentTimeMillis()
+      val latch = new CountDownLatch(numMaps)
+      val totalBytes = new AtomicLong()
+      for (task <- 1 to numMaps) {
+        executor.submit(new Runnable() {
+          override def run() = {
+            try {
+              writeOutputBytes(s, task, totalBytes)
+              latch.countDown()
+            } catch {
+              case e: Exception =>
+                println("Exception in child thread: " + e + " " + e.getMessage)
+                System.exit(1)
+            }
           }
-        }
-      })
+        })
+      }
+      latch.await()
+      val end = System.currentTimeMillis()
+      val time = (end - start) / 1000.0
+      val bytesPerSecond = totalBytes.get() / time
+      val totalFiles = numSlots * numOutputSplits
+      val bytesPerFile = (totalBytes.get() / totalFiles.toDouble).toLong
+
+      System.err.println("shuffle\t\t%s".format(s))
+      System.err.println("files_total\t\t%s".format(totalFiles))
+      System.err.println("bytes_per_file\t\t%s".format(Utils.bytesToString(bytesPerFile)))
+      System.err.println("agg_throughput\t\t%s/s".format(Utils.bytesToString(bytesPerSecond.toLong)))
+      System.err.println("")
+
+      executor.shutdown()
+      sc.stop()
     }
-    latch.await()
-    val end = System.currentTimeMillis()
-    val time = (end - start) / 1000.0
-    val bytesPerSecond = totalBytes.get() / time
-    val bytesPerFile = (totalBytes.get() / (numOutputSplits * numMaps.toDouble)).toLong
-
-    System.err.println("files_total\t\t%s".format(numMaps * numOutputSplits))
-    System.err.println("bytes_per_file\t\t%s".format(Utils.bytesToString(bytesPerFile)))
-    System.err.println("agg_throughput\t\t%s/s".format(Utils.bytesToString(bytesPerSecond.toLong)))
-
-    executor.shutdown()
-    sc.stop()
   }
 }
