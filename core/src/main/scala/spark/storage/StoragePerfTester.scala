@@ -52,8 +52,8 @@ object StoragePerfTester {
         total.addAndGet(w.fileSegment().length)
         w.close()
       }
-
       shuffle.releaseWriters(true)
+      sc.dropShuffleBlocks()
     }
 
     for (s <- 0 until numShuffles) {

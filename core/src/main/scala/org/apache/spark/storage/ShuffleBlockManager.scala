@@ -82,6 +82,11 @@ class ShuffleBlockManager(blockManager: BlockManager) {
   private
   val metadataCleaner = new MetadataCleaner(MetadataCleanerType.SHUFFLE_BLOCK_MANAGER, this.cleanup)
 
+  /** EXPERIMENTAL */
+  def dropAllShuffleFiles() {
+    this.shuffleStates.values.map(s => s.allFileGroups.map(fg => fg.files.map(f => f.delete())))
+  }
+
   def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer) = {
     new ShuffleWriterGroup {
       shuffleStates.putIfAbsent(shuffleId, new ShuffleState())
