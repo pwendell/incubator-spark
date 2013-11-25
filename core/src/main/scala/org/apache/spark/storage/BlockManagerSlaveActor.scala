@@ -35,5 +35,8 @@ class BlockManagerSlaveActor(blockManager: BlockManager) extends Actor {
     case RemoveRdd(rddId) =>
       val numBlocksRemoved = blockManager.removeRdd(rddId)
       sender ! numBlocksRemoved
+
+    case DropShuffleBlocks =>
+      blockManager.dropAllShuffleBlocks()
   }
 }

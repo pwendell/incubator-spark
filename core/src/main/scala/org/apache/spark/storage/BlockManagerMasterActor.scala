@@ -99,6 +99,10 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     case RemoveRdd(rddId) =>
       sender ! removeRdd(rddId)
 
+    case DropShuffleBlocks =>
+      dropShuffleBlocksOnWorkers
+      sender ! true
+
     case RemoveBlock(blockId) =>
       removeBlockFromWorkers(blockId)
       sender ! true
@@ -193,6 +197,17 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     } else {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
       true
+    }
+  }
+
+  // Drops shuffle blocks on all slaves
+  private def dropShuffleBlocksOnWorkers {
+    val locations = blockManagerInfo.keys
+    locations.foreach { blockManagerId: BlockManagerId =>
+      val blockManager = blockManagerInfo.get(blockManagerId)
+      if (blockManager.isDefined) {
+        blockManager.get.slaveActor ! DropShuffleBlocks
+      }
     }
   }
 

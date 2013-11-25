@@ -303,6 +303,11 @@ class SparkContext(
     parallelize(seq, numSlices)
   }
 
+  /** FOR TESTING PURPOSES */
+  def dropShuffleBlocks() = {
+    blockManagerSource.blockManager.master.dropShuffleBlocks()
+  }
+
   /** Distribute a local Scala collection to form an RDD, with one or more
     * location preferences (hostnames of Spark nodes) for each object.
     * Create a new partition for each collection item. */
