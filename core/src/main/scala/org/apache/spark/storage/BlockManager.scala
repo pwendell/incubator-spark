@@ -921,6 +921,11 @@ private[spark] class BlockManager(
     }
   }
 
+/** EXPERIMENTAL */
+def dropAllShuffleBlocks() {
+  shuffleBlockManager.clearAllShuffleBlocks
+}
+
   private def dropOldNonBroadcastBlocks(cleanupTime: Long) {
     logInfo("Dropping non broadcast blocks older than " + cleanupTime)
     val iterator = blockInfo.internalMap.entrySet().iterator()

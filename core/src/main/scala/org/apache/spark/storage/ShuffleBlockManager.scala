@@ -18,11 +18,12 @@
 package org.apache.spark.storage
 
 import org.apache.spark.serializer.Serializer
+import java.util.concurrent.ConcurrentHashMap
+import scala.collection.JavaConversions._
 
 
 private[spark]
 class ShuffleWriterGroup(val id: Int, val writers: Array[BlockObjectWriter])
-
 
 private[spark]
 trait ShuffleBlocks {
@@ -33,6 +34,13 @@ trait ShuffleBlocks {
 private[spark]
 class ShuffleBlockManager(blockManager: BlockManager) {
 
+  private val existingBlocks = new ConcurrentHashMap[String, String]
+
+  def clearAllShuffleBlocks = {
+    existingBlocks.keySet.foreach(block => blockManager.diskStore.remove(BlockId(block)))
+    existingBlocks.keySet.map(b => b).foreach(b => existingBlocks.remove(b))
+  }
+
   def forShuffle(shuffleId: Int, numBuckets: Int, serializer: Serializer): ShuffleBlocks = {
     new ShuffleBlocks {
       // Get a group of writers for a map task.
@@ -40,6 +48,7 @@ class ShuffleBlockManager(blockManager: BlockManager) {
         val bufferSize = System.getProperty("spark.shuffle.file.buffer.kb", "100").toInt * 1024
         val writers = Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
+          existingBlocks.put(blockId.name, "")
           blockManager.getDiskBlockWriter(blockId, serializer, bufferSize)
         }
         new ShuffleWriterGroup(mapId, writers)
