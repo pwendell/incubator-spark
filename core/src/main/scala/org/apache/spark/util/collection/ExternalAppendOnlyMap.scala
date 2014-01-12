@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.util.Utils
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{DiskBlockManager, DiskBlockObjectWriter}
 
@@ -117,12 +118,18 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
           (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
 
         // Assume map growth factor is 2x
-        shouldSpill = availableMemory < mapSize * 2
-        if (!shouldSpill) {
-          shuffleMemoryMap(threadId) = mapSize * 2
+        val targetSize = mapSize * 2
+        logInfo(s"Current size: (${Utils.bytesToString(mapSize)}, $numPairsInMemory items)")
+        logInfo(s"Available memory: ${Utils.bytesToString(availableMemory)}")
+        shouldSpill = availableMemory < targetSize
+        if (shouldSpill) {
+          logInfo(s"Can't allocate ${Utils.bytesToString(targetSize)}, spilling.")
+        }
+        else {
+          shuffleMemoryMap(threadId) = targetSize
         }
       }
-      // Do not synchronize spills
+
       if (shouldSpill) {
         spill(mapSize)
       }
