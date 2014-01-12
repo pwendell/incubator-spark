@@ -56,6 +56,7 @@ extends DeserializationStream {
   def readObject[T](): T = {
     if (currentBatchSize == batchSize) {
       // TODO: Make sure this throws EOF exception if it's right on the boundary
+      objIn.close()
       objIn = new ObjectInputStream(in) {
         override def resolveClass(desc: ObjectStreamClass) =
           Class.forName(desc.getName, false, loader)
