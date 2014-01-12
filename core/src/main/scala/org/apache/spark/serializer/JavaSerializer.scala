@@ -24,24 +24,51 @@ import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.SparkConf
 
 private[spark] class JavaSerializationStream(out: OutputStream) extends SerializationStream {
-  val objOut = new ObjectOutputStream(out)
-  def writeObject[T](t: T): SerializationStream = { objOut.writeObject(t); this }
+  private val batchSize = 10000
+  private var currentBatchSize = 0
+
+  var objOut = new ObjectOutputStream(out)
+
+  def writeObject[T](t: T): SerializationStream = {
+    if (currentBatchSize == batchSize) {
+      objOut.flush()
+      objOut = new ObjectOutputStream(out)
+    }
+    objOut.writeObject(t)
+    currentBatchSize += 1
+    this
+  }
+
   def flush() { objOut.flush() }
   def close() { objOut.close() }
 }
 
 private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoader)
 extends DeserializationStream {
-  val objIn = new ObjectInputStream(in) {
+  private val batchSize = 10000
+  private var currentBatchSize = 0
+
+  var objIn = new ObjectInputStream(in) {
     override def resolveClass(desc: ObjectStreamClass) =
       Class.forName(desc.getName, false, loader)
   }
 
-  def readObject[T](): T = objIn.readObject().asInstanceOf[T]
+  def readObject[T](): T = {
+    if (currentBatchSize == batchSize) {
+      // TODO: Make sure this throws EOF exception if it's right on the boundary
+      objIn = new ObjectInputStream(in) {
+        override def resolveClass(desc: ObjectStreamClass) =
+          Class.forName(desc.getName, false, loader)
+      }
+    }
+    currentBatchSize += 1
+    objIn.readObject().asInstanceOf[T]
+  }
   def close() { objIn.close() }
 }
 
 private[spark] class JavaSerializerInstance extends SerializerInstance {
+
   def serialize[T](t: T): ByteBuffer = {
     val bos = new ByteArrayOutputStream()
     val out = serializeStream(bos)

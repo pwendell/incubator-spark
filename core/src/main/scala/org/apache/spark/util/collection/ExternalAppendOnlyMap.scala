@@ -299,7 +299,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
    */
   private class DiskMapIterator(file: File) extends Iterator[(K, C)] {
     val fileStream = new FileInputStream(file)
-    val bufferedStream = new FastBufferedInputStream(fileStream)
+    val bufferedStream = new FastBufferedInputStream(fileStream, fileBufferSize)
     val deserializeStream = ser.deserializeStream(bufferedStream)
     var nextItem: (K, C) = null
     var eof = false
