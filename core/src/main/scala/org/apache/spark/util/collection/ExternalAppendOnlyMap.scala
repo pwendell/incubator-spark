@@ -119,6 +119,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
 
         // Assume map growth factor is 2x
         val targetSize = mapSize * 2
+        // TODO: Maybe only log this after some # of records (e.g. 100,000)
         logInfo(s"Current size: (${Utils.bytesToString(mapSize)}, $numPairsInMemory items)")
         logInfo(s"Available memory: ${Utils.bytesToString(availableMemory)}")
         shouldSpill = availableMemory < targetSize

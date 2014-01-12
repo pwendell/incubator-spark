@@ -33,6 +33,7 @@ private[spark] class JavaSerializationStream(out: OutputStream) extends Serializ
     if (currentBatchSize == batchSize) {
       objOut.flush()
       objOut = new ObjectOutputStream(out)
+      currentBatchSize = 0
     }
     objOut.writeObject(t)
     currentBatchSize += 1
@@ -48,23 +49,23 @@ extends DeserializationStream {
   private val batchSize = 10000
   private var currentBatchSize = 0
 
-  var objIn = new ObjectInputStream(in) {
+  def getNewStream = new ObjectInputStream(in) {
     override def resolveClass(desc: ObjectStreamClass) =
       Class.forName(desc.getName, false, loader)
   }
 
+  var objIn = getNewStream
+
   def readObject[T](): T = {
     if (currentBatchSize == batchSize) {
       // TODO: Make sure this throws EOF exception if it's right on the boundary
-      objIn.close()
-      objIn = new ObjectInputStream(in) {
-        override def resolveClass(desc: ObjectStreamClass) =
-          Class.forName(desc.getName, false, loader)
-      }
+      objIn = getNewStream
+      currentBatchSize = 0
     }
     currentBatchSize += 1
     objIn.readObject().asInstanceOf[T]
   }
+
   def close() { objIn.close() }
 }
 
