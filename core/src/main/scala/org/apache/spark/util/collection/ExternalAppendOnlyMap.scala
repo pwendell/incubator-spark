@@ -67,8 +67,8 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
-  private val sparkConf = SparkEnv.get.conf
   private val diskBlockManager = blockManager.diskBlockManager
+  private def sparkConf = SparkEnv.get.conf
 
   // Collective memory threshold shared across all running tasks
   private val maxMemoryThreshold = {
